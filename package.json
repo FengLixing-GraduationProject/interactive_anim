@@ -1,0 +1,38 @@
+{
+  "name": "interactive_anim",
+  "version": "1.0.0",
+  "main": "dist-electron/main.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build && electron-builder"
+  },
+  "build": {
+    "appId": "com.flx.interactive_anim",
+    "productName": "interactive_anim",
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*"
+    ],
+    "directories": {
+      "buildResources": "assets"
+    },
+    "win": {
+      "target": "dir",
+      "icon": "icon/icon.ico"
+    }
+  },
+  "author": "FengLixing",
+  "license": "",
+  "description": "",
+  "dependencies": {
+    "@sparkjsdev/spark": "^0.1.10",
+    "lil-gui": "^0.21.0",
+    "three": "^0.183.2",
+    "vite": "^6.4.1"
+  },
+  "devDependencies": {
+    "electron": "^41.1.0",
+    "electron-builder": "^26.8.1",
+    "vite-plugin-electron": "^0.29.1"
+  }
+}

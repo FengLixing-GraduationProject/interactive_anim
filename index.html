@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>3D高斯泼溅分块训练策略与交互动画实现的可行性研究 - 交互动画Demo</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      --bg:          #0F1117;
+      --panel-bg:    rgba(10, 12, 22, 0.93);
+      --border:      rgba(191, 224, 255, 0.28);
+      --text-hi:     #E2E8F0;
+      --text-md:     #94A3B8;
+      --text-lo:     #64748B;
+      --primary:     #BFE0FF;
+      --primary-hi:  #D8ECFF;
+      --primary-deep:#9CCEFF;
+      --primary-soft: rgba(191, 224, 255, 0.12);
+      --primary-mid:  rgba(191, 224, 255, 0.22);
+      --primary-strong: rgba(191, 224, 255, 0.38);
+    }
+
+    body {
+      overflow: hidden;
+      background: var(--bg);
+      font-family: "Inter", "Helvetica Neue", Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    #start-screen {
+      position: fixed;
+      inset: 0;
+      z-index: 300;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 22px;
+      background: #101A2A;
+    }
+
+    #start-screen h1 {
+      color: var(--text-hi);
+      font-size: clamp(30px, 4.4vw, 52px);
+      letter-spacing: 0.04em;
+      font-weight: 700;
+      text-shadow: 0 14px 32px rgba(15, 23, 42, 0.45);
+    }
+
+    .start-name {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 7px;
+      margin-top: -8px;
+      margin-bottom: 4px;
+    }
+
+    .start-name p {
+      color: rgba(216, 236, 255, 0.82);
+      font-size: 16px;
+      letter-spacing: 0.04em;
+      line-height: 1.35;
+    }
+
+    #start-btn {
+      border: 1px solid var(--primary-strong);
+      border-radius: 10px;
+      background: var(--primary-mid);
+      color: var(--primary-hi);
+      font-size: 16px;
+      letter-spacing: 0.08em;
+      padding: 12px 34px;
+      cursor: pointer;
+      transition: transform 0.14s, background 0.18s, border-color 0.18s;
+    }
+
+    #start-btn:hover {
+      transform: translateY(-1px);
+      background: var(--primary-strong);
+      border-color: var(--primary-deep);
+    }
+
+    #start-btn:active {
+      transform: translateY(0);
+    }
+
+    body.dragging-input,
+    body.dragging-input * {
+      user-select: none !important;
+      cursor: ew-resize !important;
+    }
+
+    #panel {
+      position: fixed;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 220px;
+      background: var(--panel-bg);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-right: 1px solid var(--border);
+      z-index: 100;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 20px 14px 32px;
+    }
+
+    #panel::-webkit-scrollbar { width: 3px; }
+    #panel::-webkit-scrollbar-track { background: transparent; }
+    #panel::-webkit-scrollbar-thumb { background: var(--primary-strong); border-radius: 2px; }
+
+    #panel h2 {
+      color: var(--text-hi);
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-align: center;
+      margin-bottom: 14px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .angle-btn {
+      display: block;
+      padding: 9px 12px;
+      margin: 5px 0;
+      background: var(--primary-soft);
+      color: var(--text-md);
+      text-decoration: none;
+      border-radius: 6px;
+      cursor: pointer;
+      text-align: center;
+      font-size: 13px;
+      letter-spacing: 0.04em;
+      transition: background 0.18s, color 0.18s, box-shadow 0.12s;
+      user-select: none;
+    }
+
+    .angle-btn:hover {
+      background: var(--primary-mid);
+      color: var(--text-hi);
+    }
+
+    .angle-btn.active {
+      background: var(--primary-mid);
+      color: var(--primary-hi);
+      box-shadow: inset 2px 0 0 var(--primary-deep);
+    }
+
+    #btn-particle {
+      margin-top: 10px;
+      background: var(--primary-soft);
+      color: rgba(216, 236, 255, 0.86);
+    }
+
+    #btn-particle:hover {
+      background: var(--primary-mid);
+      color: var(--primary-hi);
+    }
+
+    #btn-particle.active {
+      background: var(--primary-mid);
+      color: var(--primary-hi);
+      box-shadow: inset 2px 0 0 var(--primary-deep);
+    }
+
+    #btn-particle.transitioning {
+      opacity: 0.38;
+      pointer-events: none;
+      cursor: default;
+      box-shadow: none;
+    }
+
+    .checkbox-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 10px;
+      cursor: pointer;
+    }
+
+    .checkbox-item input[type="checkbox"] {
+      width: 14px;
+      height: 14px;
+      accent-color: var(--primary-deep);
+      cursor: pointer;
+    }
+
+    .checkbox-item span {
+      color: var(--text-md);
+      font-size: 10px;
+      letter-spacing: 0.04em;
+    }
+
+    .divider {
+      height: 1px;
+      background: var(--border);
+      margin: 14px 0;
+    }
+
+    .slider-item {
+      margin-bottom: 7px;
+    }
+
+    .slider-item .slider-label {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      color: var(--text-lo);
+      font-size: 9.5px;
+      margin-bottom: 2px;
+    }
+
+    .slider-item .slider-label .slider-val {
+      color: var(--text-md);
+      font-size: 9.5px;
+      min-width: 32px;
+      text-align: right;
+    }
+
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 3px;
+      background: var(--primary-mid);
+      border-radius: 2px;
+      outline: none;
+      cursor: ew-resize;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--primary-deep);
+      cursor: pointer;
+      transition: background 0.15s, transform 0.1s;
+    }
+
+    input[type="range"]::-webkit-slider-thumb:hover {
+      background: var(--primary-hi);
+      transform: scale(1.2);
+    }
+
+    input[type="range"]::-moz-range-thumb {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: var(--primary-deep);
+      border: none;
+      cursor: pointer;
+    }
+
+    .section-title {
+      color: var(--primary-deep);
+      font-size: 9.5px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      margin-bottom: 9px;
+    }
+
+    .transform-group {
+      margin-bottom: 9px;
+    }
+
+    .group-label {
+      color: var(--text-lo);
+      font-size: 10px;
+      margin-bottom: 4px;
+    }
+
+    .xyz-row {
+      display: flex;
+      gap: 3px;
+    }
+
+    .xyz-row label {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      flex: 1;
+      gap: 2px;
+    }
+
+    .xyz-row label span {
+      color: rgba(191, 224, 255, 0.86);
+      font-size: 9px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .xy-row {
+      display: flex;
+      gap: 3px;
+    }
+
+    .xy-row label {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      flex: 1;
+      gap: 2px;
+    }
+
+    .xy-row label span {
+      color: rgba(191, 224, 255, 0.86);
+      font-size: 9px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .scale-row {
+      display: flex;
+    }
+
+    .scale-row label {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      flex: 1;
+      gap: 2px;
+    }
+
+    .scale-row label span {
+      color: rgba(191, 224, 255, 0.86);
+      font-size: 9px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    input[type="number"] {
+      width: 100%;
+      background: rgba(15, 20, 40, 0.75);
+      border: 1px solid var(--primary-mid);
+      border-radius: 4px;
+      color: var(--text-hi);
+      transition: border-color 0.15s, background 0.15s;
+      font-size: 11px;
+      padding: 4px 2px;
+      text-align: center;
+      outline: none;
+      /* Default cursor: scrubber */
+      cursor: ew-resize;
+      /* Hide spin buttons */
+      -moz-appearance: textfield;
+    }
+
+    input[type="number"]::-webkit-inner-spin-button,
+    input[type="number"]::-webkit-outer-spin-button {
+      -webkit-appearance: none;
+    }
+
+    input[type="number"]:focus {
+      border-color: var(--primary-deep);
+      background: var(--primary-soft);
+      cursor: text;
+    }
+
+    #hint {
+      position: fixed;
+      bottom: 16px;
+      left: 236px;
+      color: #475569;
+      font-size: 11px;
+      pointer-events: none;
+      letter-spacing: 0.02em;
+    }
+
+    #loading {
+      position: fixed;
+      top: 50%;
+      left: calc(50% + 110px);
+      transform: translate(-50%, -50%);
+      color: var(--text-md);
+      font-size: 14px;
+      pointer-events: none;
+      transition: opacity 0.5s;
+    }
+
+    .scene-watermark {
+      position: fixed;
+      z-index: 140;
+      color: rgba(216, 236, 255, 0.54);
+      font-size: 24px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      pointer-events: none;
+      user-select: none;
+    }
+
+    #name-watermark {
+      top: 18px;
+      right: 22px;
+    }
+
+    #teacher-watermark {
+      top: 54px;
+      right: 22px;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div id="start-screen">
+    <h1>《3D高斯泼溅分块训练策略与交互动画实现的可行性研究》</h1>
+    <h1>交互动画Demo</h1>
+    <div class="start-name">
+      <p>冯力行 22数媒 设计学院</p>
+      <p>导师: 吕唐军</p>
+    </div>
+    <button id="start-btn" type="button">开始</button>
+  </div>
+
+  <div id="scene-root" class="hidden">
+
+  <div id="panel">
+
+    <h2>视角切换</h2>
+    <a class="angle-btn" id="btn-0">角度 1</a>
+    <a class="angle-btn" id="btn-1">角度 2</a>
+    <a class="angle-btn" id="btn-2">角度 3</a>
+    <a class="angle-btn" id="btn-particle">✦ 粒子效果</a>
+
+    <div class="divider"></div>
+
+    <div class="section-title">场景 scene.ply</div>
+
+    <div class="transform-group">
+      <div class="group-label">位置 Position</div>
+      <div class="xyz-row">
+        <label><span>X</span><input type="number" id="pos-x" value="0" step="0.1"></label>
+        <label><span>Y</span><input type="number" id="pos-y" value="0" step="0.1"></label>
+        <label><span>Z</span><input type="number" id="pos-z" value="0" step="0.1"></label>
+      </div>
+    </div>
+
+    <div class="transform-group">
+      <div class="group-label">旋转 Rotation (°)</div>
+      <div class="xyz-row">
+        <label><span>X</span><input type="number" id="rot-x" value="0" step="1"></label>
+        <label><span>Y</span><input type="number" id="rot-y" value="0" step="1"></label>
+        <label><span>Z</span><input type="number" id="rot-z" value="0" step="1"></label>
+      </div>
+    </div>
+
+    <div class="transform-group">
+      <div class="group-label">缩放 Scale（均匀）</div>
+      <div class="scale-row">
+        <label><span>S</span><input type="number" id="scale-s" value="1" step="0.05" min="0.001"></label>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="section-title">摄像机</div>
+
+    <div class="transform-group">
+      <div class="group-label">位置 Position</div>
+      <div class="xyz-row">
+        <label><span>X</span><input type="number" id="cam-x" value="0" step="0.1"></label>
+        <label><span>Y</span><input type="number" id="cam-y" value="0" step="0.1"></label>
+        <label><span>Z</span><input type="number" id="cam-z" value="0" step="0.1"></label>
+      </div>
+    </div>
+
+    <div class="transform-group">
+      <div class="group-label">旋转 Rotation (°)</div>
+      <div class="xy-row">
+        <label><span>Yaw</span><input type="number" id="cam-yaw" value="0" step="1"></label>
+        <label><span>Pitch</span><input type="number" id="cam-pitch" value="0" step="1"></label>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="section-title">粒子 · 局部随机</div>
+
+    <div class="slider-item">
+      <div class="slider-label">速度 <span class="slider-val" id="LOCAL_FREQ_val">0.2</span></div>
+      <input type="range" id="LOCAL_FREQ" min="0.1" max="3" step="0.01" value="0.2">
+    </div>
+    <div class="slider-item">
+      <div class="slider-label">触发概率 <span class="slider-val" id="LOCAL_TRIGGER_PROB_val">0.1</span></div>
+      <input type="range" id="LOCAL_TRIGGER_PROB" min="0" max="1" step="0.01" value="0.1">
+    </div>
+    <div class="slider-item">
+      <div class="slider-label">水平扩散 <span class="slider-val" id="LOCAL_DIR_XZ_SCALE_val">0.06</span></div>
+      <input type="range" id="LOCAL_DIR_XZ_SCALE" min="0" max="0.5" step="0.005" value="0.06">
+    </div>
+    <div class="slider-item">
+      <div class="slider-label">垂直扩散 <span class="slider-val" id="LOCAL_HEIGHT_BASE_val">0.08</span></div>
+      <input type="range" id="LOCAL_HEIGHT_BASE" min="0" max="0.5" step="0.005" value="0.08">
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="section-title">粒子 · 冲击波</div>
+
+    <label class="checkbox-item">
+      <input type="checkbox" id="ENABLE_SHOCK" checked>
+      <span>开启冲击波</span>
+    </label>
+
+    <div class="slider-item">
+      <div class="slider-label">触发间隔 <span class="slider-val" id="SHOCK_INTERVAL_val">4.5</span></div>
+      <input type="range" id="SHOCK_INTERVAL" min="1" max="20" step="0.5" value="4.5">
+    </div>
+    <div class="slider-item">
+      <div class="slider-label">随机延迟 <span class="slider-val" id="SHOCK_RANDOM_DELAY_val">2</span></div>
+      <input type="range" id="SHOCK_RANDOM_DELAY" min="0" max="10" step="0.1" value="2">
+    </div>
+    <div class="slider-item">
+      <div class="slider-label">传播速度 <span class="slider-val" id="SHOCK_SPEED_val">4</span></div>
+      <input type="range" id="SHOCK_SPEED" min="0.5" max="20" step="0.5" value="4">
+    </div>
+    <div class="slider-item">
+      <div class="slider-label">波形宽度 <span class="slider-val" id="SHOCK_WIDTH_SCALE_val">1.5</span></div>
+      <input type="range" id="SHOCK_WIDTH_SCALE" min="0.1" max="5" step="0.1" value="1.5">
+    </div>
+    <div class="slider-item">
+      <div class="slider-label">衰减 <span class="slider-val" id="SHOCK_TIME_DECAY_val">1</span></div>
+      <input type="range" id="SHOCK_TIME_DECAY" min="0.1" max="5" step="0.1" value="1">
+    </div>
+    <div class="slider-item">
+      <div class="slider-label">水平推力 <span class="slider-val" id="SHOCK_PUSH_XZ_val">0.01</span></div>
+      <input type="range" id="SHOCK_PUSH_XZ" min="0" max="0.2" step="0.005" value="0.01">
+    </div>
+    <div class="slider-item">
+      <div class="slider-label">垂直推力 <span class="slider-val" id="SHOCK_PUSH_Y_val">0.05</span></div>
+      <input type="range" id="SHOCK_PUSH_Y" min="0" max="0.3" step="0.005" value="0.05">
+    </div>
+    <div class="slider-item">
+      <div class="slider-label">混沌幅度 <span class="slider-val" id="SHOCK_CHAOS_AMP_val">0.02</span></div>
+      <input type="range" id="SHOCK_CHAOS_AMP" min="0" max="0.1" step="0.001" value="0.02">
+    </div>
+
+  </div><!-- /#panel -->
+
+  <div id="hint">
+    WASD 前后左右 &nbsp;·&nbsp; Q / E 上下 &nbsp;·&nbsp; 拖拽旋转 &nbsp;·&nbsp;
+    拖动输入框数值 · Shift=慢 · Ctrl=快
+  </div>
+
+  <div id="loading">场景加载中…</div>
+
+  <div class="scene-watermark" id="name-watermark">《3D高斯泼溅分块训练策略与交互动画实现的可行性研究》交互动画Demo - 冯力行</div>
+  <div class="scene-watermark" id="teacher-watermark">导师: 吕唐军</div>
+
+  </div><!-- /#scene-root -->
+
+  <script type="module" src="main.js"></script>
+
+</body>
+</html>
